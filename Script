@@ -1,0 +1,283 @@
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.net.*;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+import javax.net.ssl.HttpsURLConnection;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+public class Main {
+
+    public static final String TOKEN
+            = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzYWU5NWI3Ny1lNTFkLTQ4Y2MtYTA0NC04N2UxYTQ2ZDE5Y2IiLCJ1c2VyUm9sZSI6IkFETUlOIiwiZXhwIjoxNjI1MTcwNDExfQ.XmHVURF-iFAoLkaoFw9ncEkE6TvPHntni-qyAyleGRyBYjMIZGMND-GUqsA0_yJQBY0Pc3aJGqMgc23ZfbPU-A";
+
+    private static final class Firmware {
+
+        private final String externalId, name;
+        private final transient List<Station> stations = new ArrayList<>();
+
+        public Firmware(String name, String externalId) {
+            this.externalId = externalId;
+            this.name = name;
+        }
+    }
+
+    private static final class Model {
+
+        private final String name, externalId, manufacturer;
+        private final transient List<Firmware> firms = new ArrayList<>();
+
+        private Model(String a, String b, String c) {
+            this.name = a;
+            this.externalId = b;
+            this.manufacturer = c;
+        }
+    }
+
+    private static final class Station {
+
+        private final String stationId, externalId, chargeBoxIdentity;
+        private final transient List<Message> messages = new ArrayList<>();
+        private long distinctMessages = -1;
+
+        public Station(String stationId, String externalId, String chargeBoxIdentity) {
+            this.stationId = stationId;
+            this.externalId = externalId;
+            this.chargeBoxIdentity = chargeBoxIdentity;
+        }
+    }
+
+    private static class Message {
+
+        private final String chargeBoxIdentity, chargePointModel;
+        private long time;
+
+        public Message(String chargeBoxIdentity, String chargePointModel, long time) {
+            this.chargeBoxIdentity = chargeBoxIdentity;
+            this.chargePointModel = chargePointModel;
+            this.time = time;
+        }
+    }
+    private static int count = 0;
+
+    public static String con(String aurl) {
+        count++;
+        try {
+            URL url = new URL("https://api.evconnect.com" + aurl);
+            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            con.setRequestProperty("method", "GET");
+            con.setRequestProperty("authority", "api-stage.evconnect.com");
+            con.setRequestProperty("scheme", "https");
+            con.setRequestProperty("path", aurl);
+            con.setRequestProperty("sec-ch-ua", "\" Not;A Brand\";v=\"99\", \"Google Chrome\";v=\"91\", \"Chromium\";v=\"91\"");
+            con.setRequestProperty("accept", "application/json, text/plain, */*");
+            con.setRequestProperty("evc-api-token", TOKEN);
+            con.setRequestProperty("sec-ch-ua-mobile", "?0");
+            con.setRequestProperty("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
+            con.setRequestProperty("origin", "https://ops.evconnect.com");
+            con.setRequestProperty("sec-fetch-site", "same-site");
+            con.setRequestProperty("sec-fetch-mode", "cors");
+            con.setRequestProperty("sec-fetch-destination", "empty");
+            con.setRequestProperty("referer", "https://ops.evconnect.com/");
+            con.setRequestProperty("accept-encoding", "gzip, deflate, br");
+            con.setRequestProperty("accept-language", "en-US,en;q=0.9");
+            con.setDoOutput(true);
+            int read;
+            StringBuilder ret = new StringBuilder(1024 * 100);
+            while ((read = con.getInputStream().read()) != -1) {
+                ret.append((char) read);
+            }
+            con.disconnect();
+            return ret.toString();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
+    public static String con_r(String aurl) {
+        count++;
+        try {
+            URL url = new URL("https://reporting.evconnect.com" + aurl);
+            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            con.setRequestProperty("method", "GET");
+            con.setRequestProperty("authority", "reporting.evconnect.com");
+            con.setRequestProperty("scheme", "https");
+            con.setRequestProperty("path", aurl);
+            con.setRequestProperty("sec-ch-ua", "\" Not;A Brand\";v=\"99\", \"Google Chrome\";v=\"91\", \"Chromium\";v=\"91\"");
+            con.setRequestProperty("accept", "application/json, text/plain, */*");
+            con.setRequestProperty("evc-api-token", TOKEN);
+            con.setRequestProperty("sec-ch-ua-mobile", "?0");
+            con.setRequestProperty("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
+            con.setRequestProperty("origin", "https://reporting.evconnect.com");
+            con.setRequestProperty("sec-fetch-site", "same-site");
+            con.setRequestProperty("sec-fetch-mode", "cors");
+            con.setRequestProperty("sec-fetch-destination", "empty");
+            con.setRequestProperty("referer", "https://reporting.evconnect.com/");
+            con.setRequestProperty("accept-encoding", "gzip, deflate, br");
+            con.setRequestProperty("accept-language", "en-US,en;q=0.9");
+            con.setDoOutput(true);
+            int read;
+            StringBuilder ret = new StringBuilder(1024 * 100);
+            while ((read = con.getInputStream().read()) != -1) {
+                ret.append((char) read);
+            }
+            con.disconnect();
+            return ret.toString();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
+    private static List<Message> getBootNotifications(String chargeBoxIdentity) {
+        try {
+            List<Message> ret = new ArrayList<>();
+            JSONObject main = new JSONObject(con_r("/station-health/ocpp-logs?fromDate=" + Instant.now().minusSeconds(86400 * 60).toEpochMilli() + "&toDate=" + Instant.now().toEpochMilli() + "&pageSize=500&pageNumber=0&actions=BootNotification&chargeBoxIdentity=" + chargeBoxIdentity));
+            JSONArray content = main.getJSONArray("content");
+            for (int i = 0; i < content.length(); i++) {
+                JSONObject obj = content.getJSONObject(i);
+                if (!obj.getString("messageType").equals("REQUEST")) {
+                    continue;
+                }
+                String chargeBoxID = obj.getString("chargeBoxIdentity");
+                JSONArray sub = new JSONArray(obj.getString("payload"));
+                String cpm = null;
+                for (int j = 0; j < sub.length(); j++) {
+                    if (sub.get(j) instanceof JSONObject) {
+                        var o = sub.getJSONObject(j);
+                        if (o.has("chargePointModel")) {
+                            cpm = o.getString("chargePointModel");
+                            break;
+                        }
+                    }
+                }
+                Message n = new Message(chargeBoxID, cpm, obj.getLong("timestamp"));
+                ret.add(n);
+            }
+            return ret;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static int getStatusNotifications(String chargeBoxIdentity) {
+        try {
+            JSONObject main = new JSONObject(con_r("/station-health/ocpp-logs?fromDate=" + Instant.now().minusSeconds(86400 * 90).toEpochMilli() + "&toDate=" + Instant.now().toEpochMilli() + "&actions=StatusNotification&pageSize=500&pageNumber=0&chargeBoxIdentity=" + chargeBoxIdentity));
+            JSONArray content = main.getJSONArray("content");
+            for (int i = 0; i < content.length(); i++) {
+                JSONObject obj = content.getJSONObject(i);
+                if (!obj.getString("messageType").equals("REQUEST")) {
+                    continue;
+                }
+                JSONArray sub = new JSONArray(obj.getString("payload"));
+                for (int j = 0; j < sub.length(); j++) {
+                    if (sub.get(j) instanceof JSONObject) {
+                        var o = sub.getJSONObject(j);
+                        if (o.has("connectorId")) {
+                            if (o.getInt("connectorId") == 2) {
+                                return 2;
+                            }
+                        }
+                    }
+                }  
+            }
+            return 1;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static List<Station> stations(String man, String mod, String firm) {
+        try {
+            var k = new JSONObject(con("/rest/v6/manufacturers/" + man + "/station-models/" + mod + "/certified-configs/" + firm + "/station-ports?pageSize=100&pageNumber=0"));
+            var a = k.getJSONArray("content");
+            var ret = new ArrayList<Station>(a.length());
+            for (int i = 0; i < a.length(); i++) {
+                ret.add(new Station(a.getJSONObject(i).getString("stationId"), a.getJSONObject(i).getString("externalId"), a.getJSONObject(i).getString("chargeBoxIdentity")));
+            }
+            return ret;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private static List<Model> models(String man) {
+        try {
+            var k = new JSONObject(con("/rest/v6/manufacturers/" + man + "/station-models?manufacturerId=" + man + "pageSize=100&pageNumber=0"));
+            var a = k.getJSONArray("content");
+            var ret = new ArrayList<Model>(a.length());
+            for (int i = 0; i < a.length(); i++) {
+                ret.add(new Model(a.getJSONObject(i).getString("model"), a.getJSONObject(i).getString("externalId"), a.getJSONObject(i).getString("manufacturerId")));
+            }
+            return ret;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static List<String> mans() {
+        try {
+            var k = new JSONObject(con("/rest/v6/manufacturers?pageSize=100&pageNumber=0"));
+            var a = k.getJSONArray("content");
+            var ret = new ArrayList<String>(a.length());
+            for (int i = 0; i < a.length(); i++) {
+                ret.add(a.getJSONObject(i).getString("manufacturerId"));
+            }
+            ret.remove("VIRTUAL"); //testing manufacturer
+            return ret;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private static List<Firmware> firmware(String man, String model) {
+        try {
+            var k = new JSONObject(con("/rest/v6/manufacturers/" + man + "/station-models/" + model + "/certified-configs?manufacturerId=" + man + "&stationModelId=" + model + "&pageSize=100&pageNumber=0"));
+            var a = k.getJSONArray("content");
+            var ret = new ArrayList<Firmware>(a.length());
+            for (int i = 0; i < a.length(); i++) {
+                ret.add(new Firmware(a.getJSONObject(i).getString("firmwareVersion"), a.getJSONObject(i).getString("externalId")));
+            }
+            return ret;
+        } catch (JSONException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static void main(String[] args) throws FileNotFoundException, IOException {
+        List<Model> ret = mans().parallelStream().flatMap(n -> models(n).stream()).parallel().peek(n -> {
+            n.firms.addAll(firmware(n.manufacturer, n.externalId));
+            n.firms.parallelStream().forEach(m -> {
+                m.stations.addAll(stations(n.manufacturer, n.externalId, m.externalId));
+                m.stations.parallelStream().forEach(nl -> nl.messages.addAll(getBootNotifications(nl.chargeBoxIdentity)));
+            });
+        }).collect(Collectors.toList());
+        File fi = new File("all_stations.csv");
+        fi.createNewFile();
+        System.out.println(fi.getAbsolutePath());
+        FileWriter out = new FileWriter(fi);
+        out.write("manufacturer,model,firmware,station,chargePointModel,connectorId\r\n");
+        for (Model m : ret) {
+            for (Firmware f : m.firms) {
+                for (Station s : f.stations) {
+                    if (s.messages.size() == 0) {
+                        out.write(m.manufacturer + "," + m.name + "," + f.name + "," + s.chargeBoxIdentity + ",," + "\r\n");
+                    } else {
+                        out.write(m.manufacturer + "," + m.name + "," + f.name + "," + s.chargeBoxIdentity + "," + (s.messages.stream().map(n -> n.chargePointModel).allMatch(n -> n.equalsIgnoreCase(s.messages.get(0).chargePointModel)) ? s.messages.get(0).chargePointModel : "") + "," + getStatusNotifications(s.chargeBoxIdentity) + "\r\n");
+                    }
+                }
+            }
+        }
+        out.flush();
+        out.close();
+    }
+}
